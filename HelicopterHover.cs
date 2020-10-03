@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "1.1.9")]
+    [Info("Helicopter Hover", "0x89A", "1.2.0")]
     [Description("Allows minicopters to hover without driver on command")]
 
     public class HelicopterHover : RustPlugin
