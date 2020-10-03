@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -14,6 +13,7 @@ namespace Oxide.Plugins
     public class HelicopterHover : RustPlugin
     {
         #region -Fields-
+
         const string canHover = "helicopterhover.enable";
 
         Dictionary<int, bool> helicopterHovering = new Dictionary<int, bool>();
@@ -109,6 +109,9 @@ namespace Oxide.Plugins
 
                 [JsonProperty(PropertyName = "Disable hover on change seats")]
                 public bool disableHoverOnSeat = false;
+
+                [JsonProperty(PropertyName = "Hover on seat change")]
+                public bool hoverOnSeatSwitch = true;
             }
         }
 
@@ -375,15 +378,15 @@ namespace Oxide.Plugins
                     }
                 }
 
-                if ((!minicopter.GetFuelSystem().HasFuel()&& !_config.Hovering.disableHoverOnDismount) || (_config.Hovering.disableHoverOnSeat && minicopter.HasAnyPassengers() && minicopter.HasDriver() == false))
+                if ((!minicopter.GetFuelSystem().HasFuel() && !_config.Hovering.disableHoverOnDismount) || (_config.Hovering.disableHoverOnSeat && minicopter.HasAnyPassengers() && minicopter.HasDriver() == false))
                 {
                     minicopter.EngineOff();
                     rb.constraints = RigidbodyConstraints.None;
 
-                    minicopter.StopAllCoroutines();
+                    yield break;
                 }
 
-                yield return 1;
+                yield return null;
             }
 
             if (!helicopterHovering[minicopter.GetInstanceID()])
@@ -466,6 +469,26 @@ namespace Oxide.Plugins
             if (helicopterHovering.ContainsKey(entity.GetInstanceID()))
             {
                 helicopterHovering.Remove(entity.GetInstanceID());
+            }
+        }
+
+        void OnServerCommand(ConsoleSystem.Arg args)
+        {
+            if (args.Player() == null || args.Player().GetMountedVehicle() == null || !(args.Player().GetMountedVehicle() is MiniCopter)) return;
+
+            BasePlayer player = args.Player();
+            MiniCopter minicopter = player.GetMountedVehicle() as MiniCopter;
+            int instanceid = minicopter.GetInstanceID();
+
+            if (!helicopterHovering.ContainsKey(instanceid)) helicopterHovering.Add(instanceid, false);
+
+            switch (args.cmd.FullName)
+            {
+                case "vehicle.swapseats":
+                    if (helicopterHovering[instanceid] && _config.Hovering.disableHoverOnSeat)
+                        minicopter.StopCoroutine(WhileHovering(minicopter, minicopter.GetComponent<Rigidbody>()));
+                    else if (_config.Hovering.hoverOnSeatSwitch && !helicopterHovering[instanceid]) ToggleHover(player, minicopter);
+                        break;
             }
         }
 
