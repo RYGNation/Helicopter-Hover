@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.0")]
+    [Info("Helicopter Hover", "0x89A", "2.0.1")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
@@ -17,7 +17,7 @@ namespace Oxide.Plugins
         private static HelicopterHover plugin;
         private static Configuration _config;
 
-        private Dictionary<int, HelicopterHovering> helicopters = new Dictionary<int, HelicopterHovering>();
+        private Dictionary<int, HoveringComponent> helicopters = new Dictionary<int, HoveringComponent>();
 
         private const string canHover = "helicopterhover.canhover";
 
@@ -40,7 +40,7 @@ namespace Oxide.Plugins
             plugin = null;
             _config = null;
 
-            foreach (KeyValuePair<int, HelicopterHovering> pair in helicopters) UnityEngine.Object.Destroy(pair.Value);
+            foreach (KeyValuePair<int, HoveringComponent> pair in helicopters) UnityEngine.Object.Destroy(pair.Value);
         }
 
         void OnServerInitialized()
@@ -90,7 +90,7 @@ namespace Oxide.Plugins
         {
             if (helicopters.ContainsKey(helicopter.GetInstanceID()) || (helicopter is ScrapTransportHelicopter && !_config.Permission.scrapheliCanHover) || (helicopter is MiniCopter && !_config.Permission.miniCanHover) || (helicopter is CH47Helicopter && !_config.Permission.chinookCanHover)) return;
 
-            helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HelicopterHovering>());
+            helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HoveringComponent>());
         }
 
         void OnEntityMounted(BaseMountable mount, BasePlayer player) //Broadcast message when mounting helicopter.
@@ -109,7 +109,7 @@ namespace Oxide.Plugins
             //If is not helicopter or "helicopters" does not contain key, return
             if (parent == null || !helicopters.ContainsKey(parent.GetInstanceID())) return;
 
-            HelicopterHovering hover = helicopters[parent.GetInstanceID()];
+            HoveringComponent hover = helicopters[parent.GetInstanceID()];
 
             if (_config.Hovering.disableHoverOnDismount) hover.StopHover();
         }
@@ -119,7 +119,7 @@ namespace Oxide.Plugins
             BaseHelicopterVehicle vehicle = args.Player()?.GetMountedVehicle() as BaseHelicopterVehicle;
             if (args.cmd.FullName != "vehicle.swapseats" || vehicle == null || vehicle.GetDriver() != args.Player() || !helicopters.ContainsKey(vehicle.GetInstanceID())) return;
 
-            HelicopterHovering hover = helicopters[vehicle.GetInstanceID()];
+            HoveringComponent hover = helicopters[vehicle.GetInstanceID()];
 
             if (_config.Hovering.disableHoverOnSeat && hover.IsHovering) hover.StopHover();
             else if (_config.Hovering.hoverOnSeatSwitch && !hover.IsHovering) hover.StartHover();
@@ -127,7 +127,7 @@ namespace Oxide.Plugins
 
         #endregion -Hooks-
 
-        private class HelicopterHovering : MonoBehaviour
+        private class HoveringComponent : MonoBehaviour
         {
             BaseHelicopterVehicle helicopter;
             MiniCopter minicopter;
@@ -138,6 +138,9 @@ namespace Oxide.Plugins
 
             Coroutine hoverCoroutine;
 
+            VehicleEngineController engineController;
+            EntityFuelSystem fuelSystem;
+
             public bool IsHovering => rb.constraints == RigidbodyConstraints.FreezePositionY;
 
             void Awake()
@@ -145,6 +148,9 @@ namespace Oxide.Plugins
                 helicopter = gameObject.GetComponent<BaseHelicopterVehicle>();
                 minicopter = gameObject.GetComponent<MiniCopter>();
                 rb = gameObject.GetComponent<Rigidbody>();
+
+                engineController = minicopter.engineController;
+                fuelSystem = minicopter.GetFuelSystem();
             }
 
             public void ToggleHover()
@@ -164,6 +170,8 @@ namespace Oxide.Plugins
                 rb.constraints = RigidbodyConstraints.FreezePositionY;
                 if (!_config.Hovering.enableRotationOnHover) rb.freezeRotation = true;
 
+                engineController.FinishStartingEngine();
+
                 if (_config.Hovering.keepEngineOnHover && minicopter != null) hoverCoroutine = ServerMgr.Instance.StartCoroutine(HoveringCoroutine());
             }
 
@@ -176,7 +184,6 @@ namespace Oxide.Plugins
                 if (timedHoverTimer != null) timedHoverTimer.Destroy();
                 if (fuelUseTimer != null) fuelUseTimer.Destroy();
             }
-
 
             IEnumerator HoveringCoroutine() //Keep engine running and manage fuel
             {
@@ -192,15 +199,12 @@ namespace Oxide.Plugins
 
                 while (IsHovering)
                 {
-                    if (!minicopter.IsEngineOn() && fuelSystem.HasFuel() && (minicopter.HasAnyPassengers() || !_config.Hovering.disableHoverOnDismount))
-                        minicopter.EngineStartup();
+                    if (!engineController.IsOn && (minicopter.HasAnyPassengers() || !_config.Hovering.disableHoverOnDismount)) engineController.FinishStartingEngine();
 
-                    if (minicopter.HasDriver() && fuelSystem.HasFuel()) minicopter.EngineOn(); //Keep engine on when player in seat
-
-                    if (!minicopter.GetFuelSystem().HasFuel()) //If no fuel, stop hovering
+                    if (!fuelSystem.HasFuel()) //If no fuel, stop hovering
                     {
                         StopHover();
-                        minicopter.EngineOff();
+                        engineController.StopEngine();
 
                         yield break;
                     }
