@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.1")]
+    [Info("Helicopter Hover", "0x89A", "2.0.2")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
@@ -129,7 +129,6 @@ namespace Oxide.Plugins
 
         private class HoveringComponent : MonoBehaviour
         {
-            BaseHelicopterVehicle helicopter;
             MiniCopter minicopter;
             Rigidbody rb;
 
@@ -139,18 +138,18 @@ namespace Oxide.Plugins
             Coroutine hoverCoroutine;
 
             VehicleEngineController engineController;
-            EntityFuelSystem fuelSystem;
 
             public bool IsHovering => rb.constraints == RigidbodyConstraints.FreezePositionY;
 
             void Awake()
             {
-                helicopter = gameObject.GetComponent<BaseHelicopterVehicle>();
-                minicopter = gameObject.GetComponent<MiniCopter>();
-                rb = gameObject.GetComponent<Rigidbody>();
+                if (!TryGetComponent(out minicopter) || !TryGetComponent(out rb))
+                {
+                    DestroyImmediate(this);
+                    return;
+                }
 
-                engineController = minicopter.engineController;
-                fuelSystem = minicopter.GetFuelSystem();
+                engineController = minicopter?.engineController;
             }
 
             public void ToggleHover()
@@ -158,7 +157,7 @@ namespace Oxide.Plugins
                 if (IsHovering) StopHover();
                 else StartHover();
 
-                foreach (BaseVehicle.MountPointInfo info in helicopter.mountPoints)
+                foreach (BaseVehicle.MountPointInfo info in minicopter.mountPoints)
                 {
                     BasePlayer player = info.mountable.GetMounted();
                     if (player != null) plugin.PrintToChat(player, plugin.lang.GetMessage(IsHovering ? "HelicopterEnabled" : "HelicopterDisabled", plugin, player.UserIDString));
