@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.2")]
+    [Info("Helicopter Hover", "0x89A", "2.0.3")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
@@ -104,14 +104,12 @@ namespace Oxide.Plugins
 
         void OnEntityDismounted(BaseMountable mount, BasePlayer player) //Handle disabling hover on dismount
         {
-            BaseHelicopterVehicle parent = mount.GetParentEntity() as BaseHelicopterVehicle;
+            BaseHelicopterVehicle parent = mount?.GetParentEntity() as BaseHelicopterVehicle;
 
             //If is not helicopter or "helicopters" does not contain key, return
             if (parent == null || !helicopters.ContainsKey(parent.GetInstanceID())) return;
 
-            HoveringComponent hover = helicopters[parent.GetInstanceID()];
-
-            if (_config.Hovering.disableHoverOnDismount) hover.StopHover();
+            if (_config.Hovering.disableHoverOnDismount) helicopters[parent.GetInstanceID()]?.StopHover();
         }
 
         void OnServerCommand(ConsoleSystem.Arg args)
@@ -145,6 +143,7 @@ namespace Oxide.Plugins
             {
                 if (!TryGetComponent(out minicopter) || !TryGetComponent(out rb))
                 {
+                    plugin.helicopters.Remove(minicopter?.GetInstanceID() ?? 0);
                     DestroyImmediate(this);
                     return;
                 }
