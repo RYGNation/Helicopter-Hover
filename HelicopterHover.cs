@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.3")]
+    [Info("Helicopter Hover", "0x89A", "2.0.4")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
@@ -69,7 +69,7 @@ namespace Oxide.Plugins
 
             if (permission.UserHasPermission(player.UserIDString, canHover) && helicopter != null && helicopters.ContainsKey(helicopter.GetInstanceID()) && (_config.Permission.passengerToggle || helicopter.GetDriver() == player) && (_config.Permission.enableHoverWithTwoOccupants || helicopter.NumMounted() <= 1))
             {
-                if (helicopter.IsEngineOn() && helicopter.isMobile || helicopter.isMobile && helicopter.GetDriver() != player) helicopters[helicopter.GetInstanceID()].ToggleHover();
+                if (helicopter.IsEngineOn() && helicopter.needsVehicleTick || helicopter.needsVehicleTick && helicopter.GetDriver() != player) helicopters[helicopter.GetInstanceID()].ToggleHover();
                 else PrintToChat(player, lang.GetMessage("NotFlying", this, player.UserIDString));
             }
             else if (!permission.UserHasPermission(player.UserIDString, canHover)) 
