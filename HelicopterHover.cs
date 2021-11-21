@@ -10,7 +10,7 @@ using UnityEngine.Assertions;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.4")]
+    [Info("Helicopter Hover", "0x89A", "2.0.5")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
