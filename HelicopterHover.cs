@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 
 using UnityEngine;
 
 using Newtonsoft.Json;
+using ProtoBuf;
+using UnityEngine.Assertions;
 
 namespace Oxide.Plugins
 {
@@ -14,12 +16,12 @@ namespace Oxide.Plugins
     {
         #region -Fields-
 
-        private static HelicopterHover plugin;
+        private static HelicopterHover _plugin;
         private static Configuration _config;
 
-        private Dictionary<int, HoveringComponent> helicopters = new Dictionary<int, HoveringComponent>();
+        private Dictionary<int, HoveringComponent> _helicopters = new Dictionary<int, HoveringComponent>();
 
-        private const string canHover = "helicopterhover.canhover";
+        private const string CanHover = "helicopterhover.canhover";
 
         #endregion -Fields-
 
@@ -27,20 +29,20 @@ namespace Oxide.Plugins
 
         void Init()
         {
-            plugin = this;
+            _plugin = this;
 
-            if (!_config.enterBroadcast) Unsubscribe(nameof(OnEntityMounted));
-            if (!_config.Hovering.disableHoverOnDismount) Unsubscribe(nameof(OnEntityDismounted));
+            if (!_config.EnterBroadcast) Unsubscribe(nameof(OnEntityMounted));
+            if (!_config.Hovering.DisableHoverOnDismount) Unsubscribe(nameof(OnEntityDismounted));
 
-            permission.RegisterPermission(canHover, this);
+            permission.RegisterPermission(CanHover, this);
         }
 
         void Unload()
         {
-            plugin = null;
+            _plugin = null;
             _config = null;
 
-            foreach (KeyValuePair<int, HoveringComponent> pair in helicopters) UnityEngine.Object.Destroy(pair.Value);
+            foreach (KeyValuePair<int, HoveringComponent> pair in _helicopters) UnityEngine.Object.Destroy(pair.Value);
         }
 
         void OnServerInitialized()
@@ -67,18 +69,18 @@ namespace Oxide.Plugins
             if (player == null) return;
             BaseHelicopterVehicle helicopter = player.GetMountedVehicle() as BaseHelicopterVehicle;
 
-            if (permission.UserHasPermission(player.UserIDString, canHover) && helicopter != null && helicopters.ContainsKey(helicopter.GetInstanceID()) && (_config.Permission.passengerToggle || helicopter.GetDriver() == player) && (_config.Permission.enableHoverWithTwoOccupants || helicopter.NumMounted() <= 1))
+            if (permission.UserHasPermission(player.UserIDString, CanHover) && helicopter != null && _helicopters.ContainsKey(helicopter.GetInstanceID()) && (_config.Permission.PassengerToggle || helicopter.GetDriver() == player) && (_config.Permission.EnableHoverWithTwoOccupants || helicopter.NumMounted() <= 1))
             {
-                if (helicopter.IsEngineOn() && helicopter.needsVehicleTick || helicopter.needsVehicleTick && helicopter.GetDriver() != player) helicopters[helicopter.GetInstanceID()].ToggleHover();
+                if (helicopter.IsEngineOn() && helicopter.needsVehicleTick || helicopter.needsVehicleTick && helicopter.GetDriver() != player) _helicopters[helicopter.GetInstanceID()]?.ToggleHover();
                 else PrintToChat(player, lang.GetMessage("NotFlying", this, player.UserIDString));
             }
-            else if (!permission.UserHasPermission(player.UserIDString, canHover)) 
+            else if (!permission.UserHasPermission(player.UserIDString, CanHover)) 
                 PrintToChat(player, lang.GetMessage("NoPermission", this, player.UserIDString));
             else if (helicopter == null) 
                 PrintToChat(player, lang.GetMessage("NotInHelicopter", this, player.UserIDString));
-            else if (!_config.Permission.passengerToggle || helicopter.GetDriver() != player) 
+            else if (!_config.Permission.PassengerToggle || helicopter.GetDriver() != player) 
                 PrintToChat(player, lang.GetMessage("NoPassengerToggle", this, player.UserIDString));
-            else if (!_config.Permission.enableHoverWithTwoOccupants && helicopter.NumMounted() > 1) 
+            else if (!_config.Permission.EnableHoverWithTwoOccupants && helicopter.NumMounted() > 1) 
                 PrintToChat(player, lang.GetMessage("CantHoverTwoOccupants", this, player.UserIDString));
         }
         
@@ -88,9 +90,9 @@ namespace Oxide.Plugins
 
         void OnEntitySpawned(BaseHelicopterVehicle helicopter) //Apply custom script when helicopters spawn
         {
-            if (helicopters.ContainsKey(helicopter.GetInstanceID()) || (helicopter is ScrapTransportHelicopter && !_config.Permission.scrapheliCanHover) || (helicopter is MiniCopter && !_config.Permission.miniCanHover) || (helicopter is CH47Helicopter && !_config.Permission.chinookCanHover)) return;
+            if (_helicopters.ContainsKey(helicopter.GetInstanceID()) || (helicopter is ScrapTransportHelicopter && !_config.Permission.ScrapheliCanHover) || (helicopter is MiniCopter && !_config.Permission.MiniCanHover) || (helicopter is CH47Helicopter && !_config.Permission.ChinookCanHover)) return;
 
-            helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HoveringComponent>());
+            _helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HoveringComponent>());
         }
 
         void OnEntityMounted(BaseMountable mount, BasePlayer player) //Broadcast message when mounting helicopter.
@@ -98,7 +100,7 @@ namespace Oxide.Plugins
             BaseEntity parentEntity = mount.GetParentEntity();
 
             //Make sure that chat message only sends if the vehicle is allowed to hover (set in config)
-            if (parentEntity != null && permission.UserHasPermission(player.UserIDString, canHover) && ((parentEntity is ScrapTransportHelicopter && _config.Permission.scrapheliCanHover) || (parentEntity is MiniCopter && _config.Permission.miniCanHover) || (parentEntity is CH47Helicopter && _config.Permission.chinookCanHover)))
+            if (parentEntity != null && permission.UserHasPermission(player.UserIDString, CanHover) && ((parentEntity is ScrapTransportHelicopter && _config.Permission.ScrapheliCanHover) || (parentEntity is MiniCopter && _config.Permission.MiniCanHover) || (parentEntity is CH47Helicopter && _config.Permission.ChinookCanHover)))
                 PrintToChat(player, lang.GetMessage("Mounted", this, player.UserIDString));
         }
 
@@ -107,48 +109,51 @@ namespace Oxide.Plugins
             BaseHelicopterVehicle parent = mount?.GetParentEntity() as BaseHelicopterVehicle;
 
             //If is not helicopter or "helicopters" does not contain key, return
-            if (parent == null || !helicopters.ContainsKey(parent.GetInstanceID())) return;
+            if (parent == null || !_helicopters.ContainsKey(parent.GetInstanceID())) return;
 
-            if (_config.Hovering.disableHoverOnDismount) helicopters[parent.GetInstanceID()]?.StopHover();
+            if (_config.Hovering.DisableHoverOnDismount) _helicopters[parent.GetInstanceID()]?.StopHover();
         }
 
         void OnServerCommand(ConsoleSystem.Arg args)
         {
             BaseHelicopterVehicle vehicle = args.Player()?.GetMountedVehicle() as BaseHelicopterVehicle;
-            if (args.cmd.FullName != "vehicle.swapseats" || vehicle == null || vehicle.GetDriver() != args.Player() || !helicopters.ContainsKey(vehicle.GetInstanceID())) return;
+            if (args.cmd.FullName != "vehicle.swapseats" || vehicle == null || vehicle.GetDriver() != args.Player() || !_helicopters.ContainsKey(vehicle.GetInstanceID())) return;
 
-            HoveringComponent hover = helicopters[vehicle.GetInstanceID()];
+            HoveringComponent hover = _helicopters[vehicle.GetInstanceID()];
 
-            if (_config.Hovering.disableHoverOnSeat && hover.IsHovering) hover.StopHover();
-            else if (_config.Hovering.hoverOnSeatSwitch && !hover.IsHovering) hover.StartHover();
+            if (_config.Hovering.DisableHoverOnSeat && hover.IsHovering) hover.StopHover();
+            else if (_config.Hovering.HoverOnSeatSwitch && !hover.IsHovering) hover.StartHover();
         }
 
         #endregion -Hooks-
 
         private class HoveringComponent : MonoBehaviour
         {
-            MiniCopter minicopter;
-            Rigidbody rb;
+            private BaseHelicopterVehicle _helicopter;
+            MiniCopter _minicopter;
+            Rigidbody _rb;
 
-            Timer timedHoverTimer;
-            Timer fuelUseTimer;
+            Timer _timedHoverTimer;
+            Timer _fuelUseTimer;
 
-            Coroutine hoverCoroutine;
+            Coroutine _hoverCoroutine;
 
-            VehicleEngineController engineController;
+            VehicleEngineController _engineController;
 
-            public bool IsHovering => rb.constraints == RigidbodyConstraints.FreezePositionY;
+            public bool IsHovering => _rb.constraints == RigidbodyConstraints.FreezePositionY;
 
             void Awake()
             {
-                if (!TryGetComponent(out minicopter) || !TryGetComponent(out rb))
+                if (!TryGetComponent(out _helicopter) || !TryGetComponent(out _rb))
                 {
-                    plugin.helicopters.Remove(minicopter?.GetInstanceID() ?? 0);
+                    _plugin._helicopters.Remove(_helicopter?.GetInstanceID() ?? 0);
                     DestroyImmediate(this);
                     return;
                 }
 
-                engineController = minicopter?.engineController;
+                _minicopter = GetComponent<MiniCopter>();
+
+                _engineController = _minicopter?.engineController;
             }
 
             public void ToggleHover()
@@ -156,55 +161,63 @@ namespace Oxide.Plugins
                 if (IsHovering) StopHover();
                 else StartHover();
 
-                foreach (BaseVehicle.MountPointInfo info in minicopter.mountPoints)
+                foreach (BaseVehicle.MountPointInfo info in _helicopter.mountPoints)
                 {
                     BasePlayer player = info.mountable.GetMounted();
-                    if (player != null) plugin.PrintToChat(player, plugin.lang.GetMessage(IsHovering ? "HelicopterEnabled" : "HelicopterDisabled", plugin, player.UserIDString));
+                    if (player != null) _plugin.PrintToChat(player, _plugin.lang.GetMessage(IsHovering ? "HelicopterEnabled" : "HelicopterDisabled", _plugin, player.UserIDString));
                 }
             }
 
             public void StartHover()
             {
-                rb.constraints = RigidbodyConstraints.FreezePositionY;
-                if (!_config.Hovering.enableRotationOnHover) rb.freezeRotation = true;
+                _rb.constraints = RigidbodyConstraints.FreezePositionY;
+                if (!_config.Hovering.EnableRotationOnHover) _rb.freezeRotation = true;
 
-                engineController.FinishStartingEngine();
+                _engineController?.FinishStartingEngine();
 
-                if (_config.Hovering.keepEngineOnHover && minicopter != null) hoverCoroutine = ServerMgr.Instance.StartCoroutine(HoveringCoroutine());
+                if (_config.Hovering.KeepEngineOnHover && _helicopter != null) _hoverCoroutine = ServerMgr.Instance.StartCoroutine(HoveringCoroutine());
             }
 
             public void StopHover()
             {
-                rb.constraints = RigidbodyConstraints.None;
-                rb.freezeRotation = false;
+                _rb.constraints = RigidbodyConstraints.None;
+                _rb.freezeRotation = false;
 
-                if (hoverCoroutine != null) ServerMgr.Instance.StopCoroutine(hoverCoroutine);
-                if (timedHoverTimer != null) timedHoverTimer.Destroy();
-                if (fuelUseTimer != null) fuelUseTimer.Destroy();
+                if (_hoverCoroutine != null) ServerMgr.Instance.StopCoroutine(_hoverCoroutine);
+                if (_timedHoverTimer != null) _timedHoverTimer.Destroy();
+                if (_fuelUseTimer != null) _fuelUseTimer.Destroy();
             }
 
             IEnumerator HoveringCoroutine() //Keep engine running and manage fuel
             {
-                if (_config.Hovering.timedHover) timedHoverTimer = plugin.timer.Once(_config.Hovering.hoverDuration, () => StopHover());
+                if (_config.Hovering.TimedHover) _timedHoverTimer = _plugin.timer.Once(_config.Hovering.HoverDuration, () => StopHover());
 
-                EntityFuelSystem fuelSystem = minicopter.GetFuelSystem();
-
-                if (_config.Hovering.useFuelOnHover) fuelUseTimer = plugin.timer.Every(1f, () =>
+                EntityFuelSystem fuelSystem = _minicopter?.GetFuelSystem();
+                
+                if (fuelSystem != null)
                 {
-                    if (fuelSystem.HasFuel() && minicopter.GetDriver() == null) fuelSystem.TryUseFuel(1f, minicopter.fuelPerSec);
-                    else if (!fuelSystem.HasFuel()) fuelUseTimer.Destroy();
-                });
+                    if (_config.Hovering.UseFuelOnHover) _fuelUseTimer = _plugin.timer.Every(1f, () =>
+                    {
+                        if (fuelSystem.HasFuel() && _minicopter.GetDriver() == null) fuelSystem.TryUseFuel(1f, _minicopter.fuelPerSec);
+                        else if (!fuelSystem.HasFuel()) _fuelUseTimer.Destroy();
+                    });
+                }
 
+                //Keep engine on
+                
                 while (IsHovering)
                 {
-                    if (!engineController.IsOn && (minicopter.HasAnyPassengers() || !_config.Hovering.disableHoverOnDismount)) engineController.FinishStartingEngine();
+                    if (!(_engineController?.IsOn ?? false) && (_helicopter.HasAnyPassengers() || !_config.Hovering.DisableHoverOnDismount)) _engineController?.FinishStartingEngine();
 
-                    if (!fuelSystem.HasFuel()) //If no fuel, stop hovering
+                    if (fuelSystem != null)
                     {
-                        StopHover();
-                        engineController.StopEngine();
+                        if (!fuelSystem.HasFuel()) //If no fuel, stop hovering
+                        {
+                            StopHover();
+                            _engineController?.StopEngine();
 
-                        yield break;
+                            yield break;
+                        }
                     }
 
                     yield return null;
@@ -213,9 +226,9 @@ namespace Oxide.Plugins
 
             void OnDestroy() //Stop any timers or coroutines persisting after destruction or plugin unload
             {
-                if (hoverCoroutine != null) ServerMgr.Instance.StopCoroutine(hoverCoroutine);
-                if (timedHoverTimer != null) timedHoverTimer.Destroy();
-                if (fuelUseTimer != null) fuelUseTimer.Destroy();
+                if (_hoverCoroutine != null) ServerMgr.Instance.StopCoroutine(_hoverCoroutine);
+                _timedHoverTimer?.Destroy();
+                _fuelUseTimer?.Destroy();
             }
         }
 
@@ -224,7 +237,7 @@ namespace Oxide.Plugins
         class Configuration
         {
             [JsonProperty(PropertyName = "Broadcast message on mounted")]
-            public bool enterBroadcast = true;
+            public bool EnterBroadcast = true;
 
             [JsonProperty(PropertyName = "Permissions")]
             public PermissionClass Permission = new PermissionClass();
@@ -235,46 +248,46 @@ namespace Oxide.Plugins
             public class PermissionClass
             {
                 [JsonProperty(PropertyName = "Minicopter can hover")]
-                public bool miniCanHover = true;
+                public bool MiniCanHover = true;
                 
                 [JsonProperty(PropertyName = "Scrap Transport Helicopter can hover")]
-                public bool scrapheliCanHover = true;
+                public bool ScrapheliCanHover = true;
 
                 [JsonProperty(PropertyName = "Chinook can hover")]
-                public bool chinookCanHover = true;
+                public bool ChinookCanHover = true;
 
                 [JsonProperty(PropertyName = "Enable hover with two occupants")]
-                public bool enableHoverWithTwoOccupants = true;
+                public bool EnableHoverWithTwoOccupants = true;
 
                 [JsonProperty(PropertyName = "Passenger can toggle hover")]
-                public bool passengerToggle = true;
+                public bool PassengerToggle = true;
             }
 
             public class HoveringClass
             {
                 [JsonProperty(PropertyName = "Disable hover on dismount")]
-                public bool disableHoverOnDismount = true;
+                public bool DisableHoverOnDismount = true;
 
                 [JsonProperty(PropertyName = "Use fuel while hovering")]
-                public bool useFuelOnHover = true;
+                public bool UseFuelOnHover = true;
 
                 [JsonProperty(PropertyName = "Keep engine on when hovering")]
-                public bool keepEngineOnHover = true;
+                public bool KeepEngineOnHover = true;
 
                 [JsonProperty(PropertyName = "Enable helicopter rotation on hover")]
-                public bool enableRotationOnHover = true;
+                public bool EnableRotationOnHover = true;
 
                 [JsonProperty(PropertyName = "Disable hover on change seats")]
-                public bool disableHoverOnSeat = false;
+                public bool DisableHoverOnSeat = false;
 
                 [JsonProperty(PropertyName = "Hover on seat change")]
-                public bool hoverOnSeatSwitch = true;
+                public bool HoverOnSeatSwitch = true;
 
                 [JsonProperty(PropertyName = "Timed hover")]
-                public bool timedHover = false;
+                public bool TimedHover = false;
 
                 [JsonProperty(PropertyName = "Timed hover duration")]
-                public float hoverDuration = 60;
+                public float HoverDuration = 60;
             }
         }
 
