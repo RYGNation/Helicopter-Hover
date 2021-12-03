@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -10,7 +10,7 @@ using UnityEngine.Assertions;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.5")]
+    [Info("Helicopter Hover", "0x89A", "2.0.6")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
@@ -71,7 +71,7 @@ namespace Oxide.Plugins
 
             if (permission.UserHasPermission(player.UserIDString, CanHover) && helicopter != null && _helicopters.ContainsKey(helicopter.GetInstanceID()) && (_config.Permission.PassengerToggle || helicopter.GetDriver() == player) && (_config.Permission.EnableHoverWithTwoOccupants || helicopter.NumMounted() <= 1))
             {
-                if (helicopter.IsEngineOn() && helicopter.needsVehicleTick || helicopter.needsVehicleTick && helicopter.GetDriver() != player) _helicopters[helicopter.GetInstanceID()]?.ToggleHover();
+                if (helicopter.IsEngineOn() || helicopter.GetDriver() != player) _helicopters[helicopter.GetInstanceID()]?.ToggleHover();
                 else PrintToChat(player, lang.GetMessage("NotFlying", this, player.UserIDString));
             }
             else if (!permission.UserHasPermission(player.UserIDString, CanHover)) 
@@ -138,7 +138,7 @@ namespace Oxide.Plugins
 
             Coroutine _hoverCoroutine;
 
-            VehicleEngineController _engineController;
+            VehicleEngineController<MiniCopter> _engineController;
 
             public bool IsHovering => _rb.constraints == RigidbodyConstraints.FreezePositionY;
 
@@ -207,7 +207,7 @@ namespace Oxide.Plugins
                 
                 while (IsHovering)
                 {
-                    if (!(_engineController?.IsOn ?? false) && (_helicopter.HasAnyPassengers() || !_config.Hovering.DisableHoverOnDismount)) _engineController?.FinishStartingEngine();
+                    if (!(_engineController?.IsOn ?? false) && (_helicopter.AnyMounted() || !_config.Hovering.DisableHoverOnDismount)) _engineController?.FinishStartingEngine();
 
                     if (fuelSystem != null)
                     {
