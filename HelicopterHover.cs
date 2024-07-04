@@ -5,12 +5,10 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using Newtonsoft.Json;
-using ProtoBuf;
-using UnityEngine.Assertions;
 
 namespace Oxide.Plugins
 {
-    [Info("Helicopter Hover", "0x89A", "2.0.6")]
+    [Info("Helicopter Hover", "0x89A", "2.0.8")]
     [Description("Allows minicopters to hover without driver on command")]
     class HelicopterHover : RustPlugin
     {
@@ -49,7 +47,7 @@ namespace Oxide.Plugins
         {
             foreach (BaseNetworkable networkable in BaseNetworkable.serverEntities)
             {
-                if (networkable is BaseHelicopterVehicle) OnEntitySpawned(networkable as BaseHelicopterVehicle);
+                if (networkable is PlayerHelicopter) OnEntitySpawned(networkable as BaseHelicopter);
             }
         }
 
@@ -67,7 +65,7 @@ namespace Oxide.Plugins
         void Hover(BasePlayer player)
         {
             if (player == null) return;
-            BaseHelicopterVehicle helicopter = player.GetMountedVehicle() as BaseHelicopterVehicle;
+            BaseHelicopter helicopter = player.GetMountedVehicle() as BaseHelicopter;
 
             if (permission.UserHasPermission(player.UserIDString, CanHover) && helicopter != null && _helicopters.ContainsKey(helicopter.GetInstanceID()) && (_config.Permission.PassengerToggle || helicopter.GetDriver() == player) && (_config.Permission.EnableHoverWithTwoOccupants || helicopter.NumMounted() <= 1))
             {
@@ -88,9 +86,9 @@ namespace Oxide.Plugins
 
         #region -Hooks-
 
-        void OnEntitySpawned(BaseHelicopterVehicle helicopter) //Apply custom script when helicopters spawn
+        void OnEntitySpawned(BaseHelicopter helicopter) //Apply custom script when helicopters spawn
         {
-            if (_helicopters.ContainsKey(helicopter.GetInstanceID()) || (helicopter is ScrapTransportHelicopter && !_config.Permission.ScrapheliCanHover) || (helicopter is MiniCopter && !_config.Permission.MiniCanHover) || (helicopter is CH47Helicopter && !_config.Permission.ChinookCanHover)) return;
+            if (_helicopters.ContainsKey(helicopter.GetInstanceID()) || (helicopter is ScrapTransportHelicopter && !_config.Permission.ScrapheliCanHover) || (helicopter is Minicopter && !_config.Permission.MiniCanHover) || (helicopter is CH47Helicopter && !_config.Permission.ChinookCanHover)) return;
 
             _helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HoveringComponent>());
         }
@@ -100,13 +98,13 @@ namespace Oxide.Plugins
             BaseEntity parentEntity = mount.GetParentEntity();
 
             //Make sure that chat message only sends if the vehicle is allowed to hover (set in config)
-            if (parentEntity != null && permission.UserHasPermission(player.UserIDString, CanHover) && ((parentEntity is ScrapTransportHelicopter && _config.Permission.ScrapheliCanHover) || (parentEntity is MiniCopter && _config.Permission.MiniCanHover) || (parentEntity is CH47Helicopter && _config.Permission.ChinookCanHover)))
+            if (parentEntity != null && permission.UserHasPermission(player.UserIDString, CanHover) && ((parentEntity is ScrapTransportHelicopter && _config.Permission.ScrapheliCanHover) || (parentEntity is Minicopter && _config.Permission.MiniCanHover) || (parentEntity is CH47Helicopter && _config.Permission.ChinookCanHover)))
                 PrintToChat(player, lang.GetMessage("Mounted", this, player.UserIDString));
         }
 
         void OnEntityDismounted(BaseMountable mount, BasePlayer player) //Handle disabling hover on dismount
         {
-            BaseHelicopterVehicle parent = mount?.GetParentEntity() as BaseHelicopterVehicle;
+            BaseHelicopter parent = mount?.GetParentEntity() as BaseHelicopter;
 
             //If is not helicopter or "helicopters" does not contain key, return
             if (parent == null || !_helicopters.ContainsKey(parent.GetInstanceID())) return;
@@ -116,7 +114,7 @@ namespace Oxide.Plugins
 
         void OnServerCommand(ConsoleSystem.Arg args)
         {
-            BaseHelicopterVehicle vehicle = args.Player()?.GetMountedVehicle() as BaseHelicopterVehicle;
+            BaseHelicopter vehicle = args.Player()?.GetMountedVehicle() as BaseHelicopter;
             if (args.cmd.FullName != "vehicle.swapseats" || vehicle == null || vehicle.GetDriver() != args.Player() || !_helicopters.ContainsKey(vehicle.GetInstanceID())) return;
 
             HoveringComponent hover = _helicopters[vehicle.GetInstanceID()];
@@ -129,8 +127,9 @@ namespace Oxide.Plugins
 
         private class HoveringComponent : MonoBehaviour
         {
-            private BaseHelicopterVehicle _helicopter;
-            MiniCopter _minicopter;
+            private BaseHelicopter _helicopter;
+            private PlayerHelicopter _playerHelicopter;
+            
             Rigidbody _rb;
 
             Timer _timedHoverTimer;
@@ -138,7 +137,7 @@ namespace Oxide.Plugins
 
             Coroutine _hoverCoroutine;
 
-            VehicleEngineController<MiniCopter> _engineController;
+            VehicleEngineController<PlayerHelicopter> _engineController;
 
             public bool IsHovering => _rb.constraints == RigidbodyConstraints.FreezePositionY;
 
@@ -150,10 +149,8 @@ namespace Oxide.Plugins
                     DestroyImmediate(this);
                     return;
                 }
-
-                _minicopter = GetComponent<MiniCopter>();
-
-                _engineController = _minicopter?.engineController;
+                
+                _engineController = (_playerHelicopter = _helicopter as PlayerHelicopter)?.engineController;
             }
 
             public void ToggleHover()
@@ -192,13 +189,13 @@ namespace Oxide.Plugins
             {
                 if (_config.Hovering.TimedHover) _timedHoverTimer = _plugin.timer.Once(_config.Hovering.HoverDuration, () => StopHover());
 
-                EntityFuelSystem fuelSystem = _minicopter?.GetFuelSystem();
+                IFuelSystem fuelSystem = _helicopter?.GetFuelSystem();
                 
                 if (fuelSystem != null)
                 {
                     if (_config.Hovering.UseFuelOnHover) _fuelUseTimer = _plugin.timer.Every(1f, () =>
                     {
-                        if (fuelSystem.HasFuel() && _minicopter.GetDriver() == null) fuelSystem.TryUseFuel(1f, _minicopter.fuelPerSec);
+                        if (fuelSystem.HasFuel() && _helicopter.GetDriver() == null) fuelSystem.TryUseFuel(1f, _playerHelicopter.fuelPerSec);
                         else if (!fuelSystem.HasFuel()) _fuelUseTimer.Destroy();
                     });
                 }
