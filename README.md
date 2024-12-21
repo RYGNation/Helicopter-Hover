@@ -20,19 +20,22 @@ Bind  to a key with `bind <key> helicopterhover.hover`
 {
   "Broadcast message on mounted": true,
   "Permissions": {
-    "Scraptranporthelicopter can hover": true,
-    "Chinook can hover": true,
+    "Minicopter can hover": true,
+    "Scrap Transport Helicopter can hover": true,
+    "Chinook can hover": false,
+    "Attack Helicopter can hover": false,
     "Enable hover with two occupants": true,
     "Passenger can toggle hover": true
   },
   "Hovering": {
-    "Timed hover": false,
-    "Timed hover duration": 60.0,
+    "Disable hover on dismount": true,
     "Use fuel while hovering": true,
     "Keep engine on when hovering": true,
     "Enable helicopter rotation on hover": true,
-    "Disable hover on dismount": true,
-    "Disable hover on change seats": false
+    "Disable hover on change seats": true,
+    "Hover on seat change": false,
+    "Timed hover": false,
+    "Timed hover duration": 60.0
   }
 }
 ```
