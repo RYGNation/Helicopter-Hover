@@ -88,10 +88,16 @@ namespace Oxide.Plugins
 
         void OnEntitySpawned(BaseHelicopter helicopter) //Apply custom script when helicopters spawn
         {
-            if (_helicopters.ContainsKey(helicopter.GetInstanceID()) || (helicopter is ScrapTransportHelicopter && !_config.Permission.ScrapheliCanHover) || (helicopter is Minicopter && !_config.Permission.MiniCanHover) || (helicopter is CH47Helicopter && !_config.Permission.ChinookCanHover)) return;
+    if (_helicopters.ContainsKey(helicopter.GetInstanceID())) return;
 
-            _helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HoveringComponent>());
-        }
+    if ((helicopter is ScrapTransportHelicopter && !_config.Permission.ScrapheliCanHover) ||
+        (helicopter is Minicopter && !_config.Permission.MiniCanHover) ||
+        (helicopter is CH47Helicopter && !_config.Permission.ChinookCanHover) ||
+        (helicopter is AttackHelicopter && !_config.Permission.AttackHeliCanHover))
+        return;
+
+    _helicopters.Add(helicopter.GetInstanceID(), helicopter.gameObject.AddComponent<HoveringComponent>());
+}
 
         void OnEntityMounted(BaseMountable mount, BasePlayer player) //Broadcast message when mounting helicopter.
         {
@@ -252,6 +258,9 @@ namespace Oxide.Plugins
 
                 [JsonProperty(PropertyName = "Chinook can hover")]
                 public bool ChinookCanHover = true;
+                
+                [JsonProperty(PropertyName = "Attack Helicopter can hover")]
+                public bool AttackHeliCanHover = false;
 
                 [JsonProperty(PropertyName = "Enable hover with two occupants")]
                 public bool EnableHoverWithTwoOccupants = true;
